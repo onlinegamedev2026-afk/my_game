@@ -112,6 +112,7 @@ services:
         condition: service_healthy
     networks:
       - backend
+      - egress
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1/health || exit 1"]
