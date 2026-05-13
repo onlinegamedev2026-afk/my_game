@@ -120,8 +120,8 @@ apt install -y git
 
 ```bash
 cd /opt
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git luck_game
-cd luck_game/using_claude_v7
+git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git my_game
+cd my_game/using_claude_v7
 ```
 
 > Replace the git URL with your actual repository URL.
@@ -208,7 +208,7 @@ Two `web` replicas listen on `127.0.0.1:8000` and `127.0.0.1:8001`. Nginx on the
 Replace `YOUR_DOMAIN_OR_IP` with your domain name or droplet public IP.
 
 ```bash
-nano /etc/nginx/sites-available/luckgame
+nano /etc/nginx/sites-available/my_game
 ```
 
 Paste this configuration:
@@ -311,7 +311,7 @@ server {
 ### 4.2 Enable the Site
 
 ```bash
-ln -s /etc/nginx/sites-available/luckgame /etc/nginx/sites-enabled/luckgame
+ln -s /etc/nginx/sites-available/my_game /etc/nginx/sites-enabled/my_game
 rm /etc/nginx/sites-enabled/default
 nginx -t
 systemctl reload nginx
@@ -468,12 +468,12 @@ The `nginx/nginx.conf` file in this repo is the reference config for the host Ng
 You can copy it directly instead of pasting manually:
 
 ```bash
-cp nginx/nginx.conf /etc/nginx/sites-available/luckgame
+cp nginx/nginx.conf /etc/nginx/sites-available/my_game
 # then edit server_name inside the file
 nginx -t && systemctl reload nginx
 ```
 
-The active Nginx config lives at `/etc/nginx/sites-available/luckgame` on the host machine.
+The active Nginx config lives at `/etc/nginx/sites-available/my_game` on the host machine.
 
 ### COOKIE_SECURE
 
@@ -495,7 +495,7 @@ The two web replicas bind to `127.0.0.1:8000` and `127.0.0.1:8001` — not `0.0.
 ### .env File Security
 
 ```bash
-chmod 600 /opt/luck_game/using_claude_v7/.env
+chmod 600 /opt/my_game/using_claude_v7/.env
 ```
 
 Never commit `.env` with real credentials to git.
