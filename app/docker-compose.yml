@@ -144,8 +144,8 @@ services:
       pgbouncer:
         condition: service_healthy
     networks:
-      - backend
       - egress
+      - backend
     restart: unless-stopped
 
   # ──────────────────────────────────────────────────────────
