@@ -2,10 +2,11 @@
 
 This version is configured for deployment on a **DigitalOcean Droplet** where:
 
-- **Nginx** runs directly on the host machine (not in Docker)
+- **Host Nginx** runs directly on the Droplet — handles TLS, rate limiting, and public ports 80/443
+- **Containerised Nginx** runs inside Docker — load-balances between the 2 web replicas via Docker's internal DNS
 - **PostgreSQL** is a separate DigitalOcean Managed Database
-- Docker Compose runs all application services (web, Redis, PgBouncer, Celery, game_scheduler)
-- Two `web` replicas bind to `127.0.0.1:8000` and `127.0.0.1:8001` — Nginx on the host load-balances across both
+- Docker Compose runs all application services (web × 2, nginx, Redis, PgBouncer, Celery, game_scheduler)
+- Web replicas have **no host port binding** — only the containerised Nginx can reach them
 
 ---
 
@@ -14,19 +15,23 @@ This version is configured for deployment on a **DigitalOcean Droplet** where:
 ```
 Internet
     |
-    | :80 (HTTP now) / :443 (HTTPS later)
+    | :80 / :443
     |
-[Host Nginx]  <-- installed on the Droplet directly
+[Host Nginx]        <-- installed on Droplet; TLS + rate limiting here
     |
-    | upstream web_backend { :8000, :8001 }
+    | proxy_pass → 127.0.0.1:8080
     |
-[Docker: web replica-1 :8000]   [Docker: web replica-2 :8001]
-         |                                   |
-         +---------------+-------------------+
-                         |
-              [pgbouncer]  [redis]   (both inside Docker, backend network)
-                         |
-         [DigitalOcean Managed PostgreSQL]  <-- external, TLS required
+[Docker: nginx]     <-- containerised; load-balances via Docker DNS
+    |         |
+    |  web:8000  web:8000   (no host ports — Docker internal only)
+    |
+[Docker: web replica-1]   [Docker: web replica-2]
+         |                          |
+         +------------+-------------+
+                      |
+              [pgbouncer]  [redis]   (Docker backend network)
+                      |
+      [DigitalOcean Managed PostgreSQL]  <-- external, TLS required
 ```
 
 ---
@@ -121,7 +126,7 @@ apt install -y git
 ```bash
 cd /opt
 git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git my_game
-cd my_game/using_claude_v7
+cd my_game/app
 ```
 
 > Replace the git URL with your actual repository URL.
@@ -166,10 +171,10 @@ Run this twice — once for `SECRET_KEY`, once for `CSRF_SECRET`.
 ### 3.3 Build and Start Docker Containers
 
 ```bash
-docker compose up --build --scale web=2 -d
+docker compose up --build -d
 ```
 
-This starts: `web` (2 replicas on :8000 and :8001), `pgbouncer`, `redis`, `celery_worker`, `celery_beat`, `celery_cleanup_worker`, `game_scheduler`.
+This starts: `web` (2 replicas — no host ports), `nginx` (containerised, on `127.0.0.1:8080`), `pgbouncer`, `redis`, `celery_worker`, `celery_beat`, `celery_cleanup_worker`, `game_scheduler`.
 
 Check all containers are running:
 
@@ -182,42 +187,48 @@ All services should show `Up` or `healthy`. If any show `Exit`, check logs:
 ```bash
 docker compose logs --tail=50 pgbouncer
 docker compose logs --tail=50 web
+docker compose logs --tail=50 nginx
 ```
 
 **Common startup issue:** pgbouncer cannot reach the managed DB.
 - Verify `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` in `.env`
 - Verify your Droplet IP is in the managed DB trusted sources
 
-Test both replicas are running (from the Droplet):
+Test the containerised Nginx is reachable from the Droplet (this goes through the load balancer to a web replica):
 
 ```bash
-curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8001/health
+curl http://127.0.0.1:8080/health
 ```
 
-Expected response: `{"status": "ok"}` or similar from each.
+Expected response: `{"status": "ok"}` or similar.
 
 ---
 
 ## Part 4 — Configure Host Nginx (Reverse Proxy)
 
-Two `web` replicas listen on `127.0.0.1:8000` and `127.0.0.1:8001`. Nginx on the host load-balances public traffic across both via an upstream block.
+The containerised Nginx listens on `127.0.0.1:8080` on the host. Host Nginx proxies public traffic (ports 80/443) to it and handles TLS and rate limiting.
 
 ### 4.1 Create Nginx Config
 
-Replace `YOUR_DOMAIN_OR_IP` with your domain name or droplet public IP.
+The reference config is already in the repo at `nginx/nginx.conf`. Copy it directly and then edit `server_name`:
+
+```bash
+cp nginx/nginx.conf /etc/nginx/sites-available/my_game
+nano /etc/nginx/sites-available/my_game   # change server_name
+```
+
+Or paste manually:
 
 ```bash
 nano /etc/nginx/sites-available/my_game
 ```
 
-Paste this configuration:
+Replace `YOUR_DOMAIN_OR_IP` with your domain name or droplet public IP, then paste:
 
 ```nginx
-# Load-balance across the two web replicas
+# Proxy to the containerised Nginx which load-balances the 2 web replicas
 upstream web_backend {
-    server 127.0.0.1:8000;
-    server 127.0.0.1:8001;
+    server 127.0.0.1:8080;
 }
 
 # Rate limiting zones
@@ -396,10 +407,10 @@ Change:
 COOKIE_SECURE=true
 ```
 
-Restart the web container:
+Restart the web replicas and nginx:
 
 ```bash
-docker compose up -d web
+docker compose up -d --build web nginx
 ```
 
 ### 5.5 Auto-Renew Certificate
@@ -424,6 +435,7 @@ certbot renew --dry-run
 
 ```bash
 docker compose logs --tail=100 -f web
+docker compose logs --tail=100 -f nginx
 docker compose logs --tail=100 -f pgbouncer
 docker compose logs --tail=100 -f celery_worker
 docker compose logs --tail=100 -f game_scheduler
@@ -432,7 +444,7 @@ docker compose logs --tail=100 -f game_scheduler
 ### Restart Services
 
 ```bash
-docker compose restart web
+docker compose restart web nginx
 docker compose restart game_scheduler
 ```
 
@@ -440,22 +452,21 @@ docker compose restart game_scheduler
 
 ```bash
 docker compose down
-docker compose up --build --scale web=2 -d
+docker compose up --build -d
 ```
 
 ### Pull Code Updates and Redeploy
 
 ```bash
 git pull
-docker compose up --build --scale web=2 -d
+docker compose up --build -d
 ```
 
 ### Check Health
 
 ```bash
-curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8001/health
-curl http://localhost/health
+curl http://127.0.0.1:8080/health   # through containerised nginx → web replica
+curl http://localhost/health          # through host nginx → containerised nginx → web replica
 ```
 
 ---
@@ -469,18 +480,25 @@ curl http://localhost/health
 - If pgbouncer fails to start, check `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` in `.env`
 - `SERVER_TLS_SSLMODE=verify-ca` is mandatory for DigitalOcean managed PostgreSQL — verifies the server certificate against `certs/ca-certificate.crt`
 
-### Nginx Config Location
+### Nginx Config Files
 
-The `nginx/nginx.conf` file in this repo is the reference config for the host Nginx.
-You can copy it directly instead of pasting manually:
+There are two Nginx configs in this repo:
 
+| File | Purpose |
+|---|---|
+| `nginx/nginx.conf` | **Host Nginx** — TLS, rate limiting, proxies to :8080 |
+| `nginx/docker-nginx.conf` | **Containerised Nginx** — load-balances between web replicas via Docker DNS |
+
+The containerised config is mounted automatically by Docker Compose (no manual step needed).
+
+For the host config:
 ```bash
 cp nginx/nginx.conf /etc/nginx/sites-available/my_game
-# then edit server_name inside the file
+nano /etc/nginx/sites-available/my_game   # set server_name
 nginx -t && systemctl reload nginx
 ```
 
-The active Nginx config lives at `/etc/nginx/sites-available/my_game` on the host machine.
+The active host Nginx config lives at `/etc/nginx/sites-available/my_game` on the Droplet.
 
 ### COOKIE_SECURE
 
@@ -497,12 +515,14 @@ Only one `game_scheduler` container must run at any time. The docker-compose.yml
 
 ### Web Container Port Binding
 
-The two web replicas bind to `127.0.0.1:8000` and `127.0.0.1:8001` — not `0.0.0.0`. Both ports are NOT accessible from the internet, only from the host machine (where Nginx runs). Nginx balances across them via the `upstream web_backend` block. Do not change these bindings.
+The 2 web replicas have **no host port binding at all** — they are not reachable from the host or the internet directly. Only the containerised Nginx container can reach them, via Docker's internal `backend` network using the service name `web:8000`. Docker DNS automatically round-robins between both replicas.
+
+The containerised Nginx publishes `127.0.0.1:8080` to the host so host Nginx can proxy to it. Do not add host ports to the web service.
 
 ### .env File Security
 
 ```bash
-chmod 600 /opt/my_game/using_claude_v7/.env
+chmod 600 /opt/my_game/app/.env
 ```
 
 Never commit `.env` with real credentials to git.
@@ -520,8 +540,9 @@ docker compose logs -f web
 ## Checklist Before Going Live
 
 - [ ] All `change-me` values replaced in `.env`
-- [ ] `docker compose ps` shows all services healthy
-- [ ] `curl http://127.0.0.1:8000/health` and `curl http://127.0.0.1:8001/health` both return ok
+- [ ] `docker compose ps` shows all services healthy (web ×2, nginx, pgbouncer, redis, celery*)
+- [ ] `curl http://127.0.0.1:8080/health` returns ok (containerised nginx → web replica)
+- [ ] `curl http://localhost/health` returns ok (host nginx → containerised nginx → web replica)
 - [ ] Host Nginx config tested with `nginx -t`
 - [ ] Login page loads at `http://YOUR_IP/`
 - [ ] OTP email sends correctly (check SMTP settings)

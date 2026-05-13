@@ -53,16 +53,15 @@ services:
       retries: 5
 
   # ──────────────────────────────────────────────────────────
-  # FastAPI web app — bound to 127.0.0.1:8000 so only the
-  # host machine's Nginx can reach it (not the open internet).
-  # SSL/TLS is terminated by host Nginx; set COOKIE_SECURE=true.
+  # FastAPI web app — 2 replicas, NO host port binding.
+  # Reached only by the containerised Nginx via Docker's
+  # internal backend network (service name "web", port 8000).
+  # SSL/TLS terminated by host Nginx; set COOKIE_SECURE=true.
   # ──────────────────────────────────────────────────────────
   web:
     build: .
     env_file:
       - .env
-    ports:
-      - "127.0.0.1:8000-8001:8000"
     environment:
       APP_ENV: ${APP_ENV:-production}
       DB_HOST: pgbouncer
@@ -80,6 +79,8 @@ services:
     networks:
       - backend
     restart: unless-stopped
+    deploy:
+      replicas: 2
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 15s
@@ -91,6 +92,33 @@ services:
       options:
         max-file: "5"
         max-size: "50m"
+
+  # ──────────────────────────────────────────────────────────
+  # Nginx (containerised) — internal load balancer.
+  # Docker DNS resolves "web" to both replica IPs and round-robins.
+  # Publishes 127.0.0.1:8080 to the host so host Nginx can reach it.
+  # Web replicas have no host port bindings — only this container
+  # can talk to them (via the backend network).
+  # ──────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: luckv7_nginx
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./nginx/docker-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   # ──────────────────────────────────────────────────────────
   # Celery worker — handles email queue (default "celery" queue only).
