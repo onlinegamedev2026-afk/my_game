@@ -144,8 +144,10 @@ services:
       pgbouncer:
         condition: service_healthy
     networks:
-      - egress
-      - backend
+      egress:
+        priority: 100
+      backend:
+        priority: 10
     restart: unless-stopped
 
   # ──────────────────────────────────────────────────────────
@@ -195,8 +197,10 @@ services:
       pgbouncer:
         condition: service_healthy
     networks:
-      - backend
-      - egress
+      egress:
+        priority: 100
+      backend:
+        priority: 10
     restart: unless-stopped
 
   # ──────────────────────────────────────────────────────────
