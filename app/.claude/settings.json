@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/PritamV/OneDrive/2025-lenovo/OneDrive/Desktop/Sanat_Project/luck_game/development/**)",
+      "Bash(cp -r \"c:/Users/PritamV/OneDrive/2025-lenovo/OneDrive/Desktop/Sanat_Project/luck_game/development/using_claude_v5\" \"c:/Users/PritamV/OneDrive/2025-lenovo/OneDrive/Desktop/Sanat_Project/luck_game/development/using_claude_v6\" && echo \"copy done\" && ls \"c:/Users/PritamV/OneDrive/2025-lenovo/OneDrive/Desktop/Sanat_Project/luck_game/development/using_claude_v6\")",
+      "Bash(docker compose *)",
+      "Bash(Start-Sleep -Seconds 15)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":5432\")",
+      "Bash(findstr LISTENING)",
+      "Bash(docker exec *)",
+      "PowerShell(docker exec luckv6_pgbouncer cat /etc/hosts)",
+      "PowerShell(docker exec luckv6_pgbouncer nc -vz host.docker.internal 5432 2>&1)",
+      "PowerShell(docker compose -f \"c:\\\\Users\\\\PritamV\\\\OneDrive\\\\2025-lenovo\\\\OneDrive\\\\Desktop\\\\Sanat_Project\\\\luck_game\\\\development\\\\using_claude_v6\\\\docker-compose.yml\" ps 2>&1)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\PritamV\\OneDrive\\2025-lenovo\\OneDrive\\Desktop\\Sanat_Project\\luck_game\\development\\using_claude_v3\\static"
+    ]
+  }
+}

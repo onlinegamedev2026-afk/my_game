@@ -1,0 +1,209 @@
+services:
+
+  # ──────────────────────────────────────────────────────────
+  # PgBouncer — connection pooler in front of the DigitalOcean
+  # managed PostgreSQL. DB_HOST must be the managed DB private
+  # hostname (set in .env). DB_PORT=25060 for DigitalOcean.
+  # SERVER_TLS_SSLMODE=verify-ca (managed DB enforces TLS + CA cert verification).
+  # ──────────────────────────────────────────────────────────
+  pgbouncer:
+    build:
+      context: ./pgbouncer
+    container_name: luckv7_pgbouncer
+    volumes:
+      - ./certs/ca-certificate.crt:/etc/pgbouncer/ca-certificate.crt:ro
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-25060}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SERVER_TLS_SSLMODE: ${SERVER_TLS_SSLMODE:-verify-ca}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-500}
+      DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-30}
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 5432"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - backend
+      - egress
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────────────────
+  # Redis — session cache, Pub/Sub, Celery broker.
+  # Runs inside Docker Compose; not exposed to the host.
+  # ──────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: luckv7_redis
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ──────────────────────────────────────────────────────────
+  # FastAPI web app — bound to 127.0.0.1:8000 so only the
+  # host machine's Nginx can reach it (not the open internet).
+  # SSL/TLS is terminated by host Nginx; set COOKIE_SECURE=true.
+  # ──────────────────────────────────────────────────────────
+  web:
+    build: .
+    env_file:
+      - .env
+    deploy:
+      replicas: 2
+    ports:
+      - "127.0.0.1:8000-8001:8000"
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DB_HOST: pgbouncer
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      GAME_SCHEDULER_ENABLED: "false"
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "50m"
+
+  # ──────────────────────────────────────────────────────────
+  # Celery worker — handles email queue (default "celery" queue only).
+  # Restricted to -Q celery so it does NOT consume cleanup tasks.
+  # ──────────────────────────────────────────────────────────
+  celery_worker:
+    build: .
+    container_name: luckv7_celery_worker
+    command: celery -A tasks.celery_app.celery_app worker -Q celery --loglevel=info --concurrency=4
+    env_file:
+      - .env
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DB_HOST: pgbouncer
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      redis:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+    networks:
+      - backend
+      - egress
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────────────────
+  # Celery Beat — fires the daily_cleanup_job at 02:00 UTC.
+  # Only one beat process should ever run.
+  # ──────────────────────────────────────────────────────────
+  celery_beat:
+    build: .
+    container_name: luckv7_celery_beat
+    command: celery -A tasks.celery_app.celery_app beat --loglevel=info
+    env_file:
+      - .env
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DB_HOST: pgbouncer
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────────────────
+  # Celery cleanup worker — processes "cleanup" queue only.
+  # concurrency=1 keeps tasks sequential (bets archived before sessions).
+  # ──────────────────────────────────────────────────────────
+  celery_cleanup_worker:
+    build: .
+    container_name: luckv7_celery_cleanup_worker
+    command: celery -A tasks.celery_app.celery_app worker -Q cleanup --concurrency=1 --loglevel=info
+    env_file:
+      - .env
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DB_HOST: pgbouncer
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      redis:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+    networks:
+      - backend
+      - egress
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────────────────
+  # Game scheduler — sole owner of all game cycles.
+  # ──────────────────────────────────────────────────────────
+  game_scheduler:
+    build: .
+    container_name: luckv7_game_scheduler
+    command: python -m scheduler.game_scheduler
+    env_file:
+      - .env
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DB_HOST: pgbouncer
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      GAME_SCHEDULER_ENABLED: "true"
+    depends_on:
+      redis:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+
+networks:
+  # egress: allows pgbouncer and celery workers to reach the external managed DB
+  egress:
+  # backend: internal-only network; containers cannot reach the internet directly
+  backend:
+    internal: true
+
+volumes:
+  redis_data:

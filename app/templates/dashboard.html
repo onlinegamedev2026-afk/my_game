@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — {{ actor.display_name }}{% endblock %}
+{% block body_class %}dashboard-page{% endblock %}
+{% block body %}
+<header class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-name">{{ actor.display_name }}</span>
+    <span class="topbar-role role-badge role-{{ actor.role | lower }}">{{ actor.role }}</span>
+    <span class="topbar-balance"><span class="balance-label">Balance</span> <strong id="player-balance" class="balance-amount">{{ "%.3f"|format(actor.balance) }}</strong> <span class="balance-unit">units</span></span>
+  </div>
+  <nav class="topbar-nav">
+    <a href="/games" class="nav-link">🎮 Games</a>
+    <a href="/download/transactions" class="nav-link">📄 Transactions</a>
+    <a href="/download/children" class="nav-link">👥 Export</a>
+    <form method="post" action="/logout" style="margin:0"><button class="btn btn-ghost btn-sm">Logout</button></form>
+  </nav>
+</header>
+
+<main class="dash-layout">
+  {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+  {% if notice %}<div class="alert alert-notice">{{ notice }}</div>{% endif %}
+
+  <div class="dash-grid">
+
+    <!-- Left Column -->
+    <div class="dash-col-left">
+
+      {% if actor.role != "ADMIN" %}
+      <section class="panel">
+        <h2 class="panel-title">Change Password</h2>
+        <form class="inline-form" method="post" action="/password/update">
+          <input name="old_password" type="password" class="field-input" placeholder="Current password" autocomplete="current-password" required>
+          <input name="new_password" type="password" class="field-input" placeholder="New password" autocomplete="new-password" required>
+          <button class="btn btn-primary">Update</button>
+        </form>
+      </section>
+      {% endif %}
+
+      {% if actor.role == "ADMIN" %}
+      <section class="panel">
+        <h2 class="panel-title">Admin Balance</h2>
+        <form class="inline-form" method="post" action="/wallet/admin/adjust">
+          <input name="amount" value="100.000" class="field-input" inputmode="decimal" style="width:140px" required>
+          <select name="direction" class="field-input" style="width:120px">
+            <option value="add">Add</option>
+            <option value="deduct">Deduct</option>
+          </select>
+          <button class="btn btn-primary">Apply</button>
+        </form>
+      </section>
+      {% endif %}
+
+      {% if actor.role != "USER" %}
+      <section class="panel">
+        <h2 class="panel-title">Create Account</h2>
+        <form class="create-form" method="post" action="/children" id="create-child-form">
+          <div class="field-group">
+            <label class="field-label">Display Name</label>
+            <input name="display_name" id="display-name-input" class="field-input" placeholder="Full name" required>
+          </div>
+          <div class="field-group" id="email-field-group">
+            <label class="field-label">Email <span id="email-required-hint" class="hint-text">(required for Agent)</span></label>
+            <input name="email" id="email-input" type="email" class="field-input" placeholder="email@example.com">
+          </div>
+          <div id="agent-email-otp" class="otp-inline">
+            <button type="button" id="send-email-otp" class="btn btn-secondary btn-sm" disabled>Send OTP</button>
+            <input id="email-otp-input" class="field-input" inputmode="numeric" maxlength="6" placeholder="6-digit OTP" disabled style="width:130px">
+            <button type="button" id="verify-email-otp" class="btn btn-secondary btn-sm" disabled>Verify</button>
+            <span id="email-otp-status" class="otp-status-text"></span>
+          </div>
+          <input name="email_otp_token" id="email-otp-token" type="hidden">
+          <div class="field-row">
+            <div class="field-group" style="flex:1">
+              <label class="field-label">Role</label>
+              <select name="role" id="role-input" class="field-input">
+                {% if actor.role == "ADMIN" %}<option value="AGENT">Agent</option>{% endif %}
+                {% if actor.role == "AGENT" %}<option value="AGENT">Agent</option><option value="USER">User</option>{% endif %}
+              </select>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field-group" style="flex:1">
+              <label class="field-label">User ID</label>
+              <input name="username" id="username-input" class="field-input" placeholder="Auto-generated" readonly required>
+            </div>
+            <div class="field-group" style="flex:1">
+              <label class="field-label">Password</label>
+              <input name="password" id="password-input" class="field-input" placeholder="Auto-generated" readonly required>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="button" id="generate-credentials" class="btn btn-secondary" disabled>Generate ID & Password</button>
+            <button id="create-child-button" class="btn btn-primary" disabled>Create Account</button>
+          </div>
+        </form>
+      </section>
+      {% endif %}
+
+    </div>
+
+    <!-- Right Column -->
+    <div class="dash-col-right">
+
+      {% if actor.role != "USER" %}
+      <section class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">Accounts</h2>
+          <div class="panel-actions">
+            {% if actor.role == "AGENT" %}
+            {% set next_filter = 'USER' if role_filter == 'ALL' else ('AGENT' if role_filter == 'USER' else 'ALL') %}
+            {% set filter_label = 'Show All' if next_filter == 'ALL' else ('Users Only' if next_filter == 'USER' else 'Agents Only') %}
+            <a class="btn btn-ghost btn-sm" href="/dashboard?role_filter={{ next_filter }}{% if q %}&q={{ q }}{% endif %}">{{ filter_label }}</a>
+            {% endif %}
+            <form class="search-form" method="get" action="/dashboard">
+              <input name="q" value="{{ q }}" class="field-input search-input" placeholder="Search by name or ID">
+              <input type="hidden" name="role_filter" value="{{ role_filter }}">
+              <button class="btn btn-primary btn-sm">Search</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="accounts-table">
+          <div class="accounts-header">
+            <span>Account</span>
+            <span>Balance</span>
+            <span>Actions</span>
+          </div>
+          {% for child in children %}
+          <div class="account-row">
+            <div class="account-info">
+              <strong class="account-name">{{ child.display_name }}</strong>
+              <span class="account-meta">
+                <span class="role-badge role-{{ child.role | lower }} badge-sm">{{ child.role }}</span>
+                {{ child.username }}
+                <span class="account-status status-{{ child.status | lower }}">{{ child.status }}</span>
+              </span>
+            </div>
+            <div class="account-balance">
+              <strong class="balance-amount child-balance">{{ "%.3f"|format(child.balance) }}</strong>
+              <span class="balance-unit">units</span>
+            </div>
+            <div class="account-actions">
+              <form method="post" action="/wallet/add" class="action-form">
+                <input type="hidden" name="child_id" value="{{ child.id }}">
+                <input name="amount" value="10.000" class="field-input amount-input">
+                <button class="btn btn-success btn-sm" title="Add units">+</button>
+              </form>
+              <form method="post" action="/wallet/deduct" class="action-form">
+                <input type="hidden" name="child_id" value="{{ child.id }}">
+                <input name="amount" value="10.000" class="field-input amount-input">
+                <button class="btn btn-warning btn-sm" title="Deduct units">−</button>
+              </form>
+              <form method="post" action="/children/regenerate-password" class="action-form">
+                <input type="hidden" name="child_id" value="{{ child.id }}">
+                <button class="btn btn-ghost btn-sm" title="Regenerate password">🔑</button>
+              </form>
+              <form method="post" action="/children/status" class="action-form">
+                <input type="hidden" name="child_id" value="{{ child.id }}">
+                <input type="hidden" name="status" value="{{ 'INACTIVE' if child.status == 'ACTIVE' else 'ACTIVE' }}">
+                <button class="btn btn-ghost btn-sm" title="{{ 'Deactivate' if child.status == 'ACTIVE' else 'Activate' }}">
+                  {{ '🔴' if child.status == 'ACTIVE' else '🟢' }}
+                </button>
+              </form>
+              <form method="post" action="/children/delete" class="action-form">
+                <input type="hidden" name="child_id" value="{{ child.id }}">
+                <button class="btn btn-danger btn-sm" title="Remove account" onclick="return confirm('Remove this account and all its children?')">🗑</button>
+              </form>
+            </div>
+          </div>
+          {% else %}
+          <div class="empty-state">No accounts found.</div>
+          {% endfor %}
+        </div>
+
+        <div class="pagination">
+          <span class="muted">{{ children|length }} of {{ child_total }} accounts</span>
+          <div class="pagination-btns">
+            {% if has_prev %}
+            <a class="btn btn-ghost btn-sm" href="/dashboard?page={{ page - 1 }}&role_filter={{ role_filter }}{% if q %}&q={{ q }}{% endif %}">← Prev</a>
+            {% endif %}
+            {% if has_next %}
+            <a class="btn btn-ghost btn-sm" href="/dashboard?page={{ page + 1 }}&role_filter={{ role_filter }}{% if q %}&q={{ q }}{% endif %}">Next →</a>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+      {% endif %}
+
+      <section class="panel">
+        <h2 class="panel-title">Recent Transactions</h2>
+        <div class="ledger-table">
+          {% for tx in transactions %}
+          {% set is_credit = tx.to_wallet_id == actor.wallet_id %}
+          <div class="ledger-row">
+            <span class="ledger-direction {{ 'direction-in' if is_credit else 'direction-out' }}">
+              {{ '↓ IN' if is_credit else '↑ OUT' }}
+            </span>
+            <span class="ledger-type">{{ tx.transaction_type.replace('_', ' ') }}</span>
+            <strong class="ledger-amount {{ 'amount-in' if is_credit else 'amount-out' }}">
+              {{ '+' if is_credit else '−' }}{{ tx.amount }}
+            </strong>
+            <span class="ledger-date">{{ tx.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+          </div>
+          {% else %}
+          <div class="empty-state">No transactions yet.</div>
+          {% endfor %}
+        </div>
+      </section>
+
+    </div>
+  </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/common.js"></script>
+<script>
+const generateButton = document.querySelector("#generate-credentials");
+if (generateButton) {
+  const form = document.querySelector("#create-child-form");
+  const nameInput = document.querySelector("#display-name-input");
+  const emailInput = document.querySelector("#email-input");
+  const roleInput = document.querySelector("#role-input");
+  const usernameInput = document.querySelector("#username-input");
+  const passwordInput = document.querySelector("#password-input");
+  const createButton = document.querySelector("#create-child-button");
+  const otpPanel = document.querySelector("#agent-email-otp");
+  const sendOtpButton = document.querySelector("#send-email-otp");
+  const otpInput = document.querySelector("#email-otp-input");
+  const verifyOtpButton = document.querySelector("#verify-email-otp");
+  const otpTokenInput = document.querySelector("#email-otp-token");
+  const otpStatus = document.querySelector("#email-otp-status");
+  let emailVerified = false;
+  const needsEmail = () => roleInput.value === "AGENT";
+  const hasValidEmail = () => emailInput.validity.valid && emailInput.value.trim().length > 0;
+  const canGenerate = () => {
+    const hasName = nameInput.value.trim().length > 0;
+    const emailReady = !needsEmail() || (hasValidEmail() && emailVerified);
+    return hasName && emailReady;
+  };
+  const updateCreateControls = () => {
+    const emailGroup = document.querySelector("#email-field-group");
+    emailInput.hidden = !needsEmail();
+    otpPanel.hidden = !needsEmail();
+    if (!needsEmail()) {
+      emailInput.required = false;
+      emailInput.value = "";
+    }
+    sendOtpButton.disabled = !needsEmail() || !hasValidEmail();
+    otpInput.disabled = !needsEmail() || !otpTokenInput.value || emailVerified;
+    verifyOtpButton.disabled = otpInput.disabled || otpInput.value.trim().length !== 6;
+    generateButton.disabled = !canGenerate();
+    createButton.disabled = !(usernameInput.value.trim() && passwordInput.value.trim());
+  };
+  const setOtpStatus = (message, ok = false) => {
+    otpStatus.textContent = message;
+    otpStatus.className = "otp-status-text" + (ok ? " otp-ok" : (message ? " otp-error" : ""));
+  };
+  const clearGeneratedCredentials = () => {
+    usernameInput.value = "";
+    passwordInput.value = "";
+    updateCreateControls();
+  };
+  const clearEmailOtp = () => {
+    emailVerified = false;
+    otpTokenInput.value = "";
+    otpInput.value = "";
+    setOtpStatus("");
+    clearGeneratedCredentials();
+  };
+  nameInput.addEventListener("input", clearGeneratedCredentials);
+  emailInput.addEventListener("input", clearEmailOtp);
+  roleInput.addEventListener("change", () => {
+    emailInput.required = needsEmail();
+    clearEmailOtp();
+    updateCreateControls();
+  });
+  otpInput.addEventListener("input", updateCreateControls);
+  sendOtpButton.addEventListener("click", async () => {
+    if (!hasValidEmail()) { emailInput.focus(); return; }
+    clearEmailOtp();
+    setOtpStatus("Sending...");
+    const body = new URLSearchParams({ email: emailInput.value.trim(), role: roleInput.value });
+    const response = await fetch("/children/email-otp/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setOtpStatus(data.detail || "Could not send OTP.");
+      updateCreateControls();
+      return;
+    }
+    otpTokenInput.value = data.token || "";
+    const devOtp = data.dev_otp ? ` (Dev: ${data.dev_otp})` : "";
+    setOtpStatus(`OTP sent to email.${devOtp}`, true);
+    updateCreateControls();
+    otpInput.focus();
+  });
+  verifyOtpButton.addEventListener("click", async () => {
+    const body = new URLSearchParams({
+      email: emailInput.value.trim(),
+      otp_token: otpTokenInput.value,
+      otp_code: otpInput.value.trim(),
+    });
+    const response = await fetch("/children/email-otp/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      emailVerified = false;
+      setOtpStatus(data.detail || "OTP validation failed.");
+      updateCreateControls();
+      return;
+    }
+    emailVerified = true;
+    setOtpStatus("Email verified ✓", true);
+    clearGeneratedCredentials();
+  });
+  emailInput.required = needsEmail();
+  updateCreateControls();
+  generateButton.addEventListener("click", async () => {
+    const name = nameInput.value.trim();
+    const email = emailInput.value.trim();
+    if (!canGenerate()) {
+      (needsEmail() && !emailInput.validity.valid ? emailInput : nameInput).focus();
+      return;
+    }
+    const params = new URLSearchParams({
+      display_name: name,
+      role: roleInput.value,
+      email,
+      email_otp_token: otpTokenInput.value,
+    });
+    const response = await fetch(`/credentials/generate?${params.toString()}`);
+    if (!response.ok) return;
+    const data = await response.json();
+    usernameInput.value = data.username;
+    passwordInput.value = data.password;
+    updateCreateControls();
+  });
+  form.addEventListener("submit", (event) => {
+    if (!usernameInput.value.trim() || !passwordInput.value.trim()) {
+      event.preventDefault();
+      generateButton.focus();
+    }
+  });
+}
+
+</script>
+{% endblock %}

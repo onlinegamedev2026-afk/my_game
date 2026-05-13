@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Andar Bahar — {{ app_name }}{% endblock %}
+{% block body_class %}game-page andar-bahar-page{% endblock %}
+{% block body %}
+<header class="topbar game-topbar">
+  <div class="topbar-left">
+    <span class="topbar-name">Andar Bahar</span>
+    <span class="topbar-balance">
+      ID <b id="player-id">{{ actor.username }}</b> ·
+      <strong id="player-balance" class="balance-amount">{{ "%.3f"|format(actor.balance) }}</strong> units
+    </span>
+  </div>
+  <nav class="topbar-nav">
+    <button type="button" id="refresh-balance" class="btn btn-ghost btn-sm">↻ Balance</button>
+    <a href="/games" class="nav-link">Games</a>
+    {% if actor.role in ["ADMIN", "AGENT"] %}
+    <a href="/dashboard" class="nav-link">Dashboard</a>
+    {% endif %}
+  </nav>
+</header>
+
+<main class="game-shell" data-game-key="{{ game.key }}">
+  {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+  {% if notice %}<div class="alert alert-notice">{{ notice }}</div>{% endif %}
+
+  <!-- Bet Controls -->
+  <section class="game-controls">
+    <form method="post" action="/games/{{ game.key }}/bet" id="bet-form" class="bet-form">
+      <div class="bet-side-select">
+        <label class="side-option">
+          <input type="radio" name="side" value="A" checked class="side-radio">
+          <span class="side-btn side-a">A / Andar</span>
+        </label>
+        <label class="side-option">
+          <input type="radio" name="side" value="B" class="side-radio">
+          <span class="side-btn side-b">B / Bahar</span>
+        </label>
+      </div>
+      <div class="bet-amount-group">
+        <input name="amount" id="bet-amount" class="field-input bet-amount-input" value="10.000" inputmode="decimal">
+        <button id="bet-submit" class="btn btn-bet">Place Bet</button>
+      </div>
+      <span id="bet-status" class="bet-status">Waiting for betting time</span>
+    </form>
+    {% if actor.role == "ADMIN" %}
+    <div id="betting-totals" class="betting-totals" hidden>
+      <span class="total-label">A/Andar:</span> <b id="total-a">0.000</b>
+      <span class="total-sep">·</span>
+      <span class="total-label">B/Bahar:</span> <b id="total-b">0.000</b>
+    </div>
+    {% endif %}
+    <div class="conn-indicator">
+      <span class="conn-dot" id="conn-dot"></span>
+      <span id="conn-status">Offline</span>
+    </div>
+  </section>
+
+  <!-- Phase Banner with Progress Bar -->
+  <section class="phase-banner" id="phase-banner-wrap">
+    <div id="banner" class="banner-text">Connecting...</div>
+    <div class="timer-bar-wrap" id="timer-bar-wrap" hidden>
+      <div class="timer-bar" id="timer-bar"></div>
+    </div>
+  </section>
+
+  <!-- My Bets -->
+  <section class="bets-panel">
+    <h2 class="panel-title">My Bets This Round</h2>
+    <div id="my-bets-list" class="bets-list"><p class="muted">No bets placed yet.</p></div>
+  </section>
+
+  <!-- Joker Card -->
+  <section class="joker-section">
+    <div class="joker-label">
+      <strong>Joker</strong>
+      <span class="muted">Reference card</span>
+    </div>
+    <div id="joker-card" class="cards-row joker-row"><div class="card-slot"></div></div>
+  </section>
+
+  <!-- Card Groups -->
+  <div class="card-groups">
+    <article id="panel-a" class="group-panel">
+      <div class="group-header">
+        <h3>A / Andar</h3>
+        <span id="count-a" class="card-count muted">0 cards</span>
+      </div>
+      <div id="cards-a" class="cards-row"></div>
+    </article>
+    <article id="panel-b" class="group-panel">
+      <div class="group-header">
+        <h3>B / Bahar</h3>
+        <span id="count-b" class="card-count muted">0 cards</span>
+      </div>
+      <div id="cards-b" class="cards-row"></div>
+    </article>
+  </div>
+
+  <!-- Result -->
+  <section id="result" class="result-panel"></section>
+
+  <!-- History -->
+  <section class="history-section">
+    <h3 class="history-title">Last 10 Results</h3>
+    <div id="history-track" class="history-track"></div>
+  </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/common.js"></script>
+<script src="/static/games/game_core.js"></script>
+<script src="/static/games/andar_bahar.js"></script>
+{% endblock %}

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token | default('') }}">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/styles.css?v=3">
+  {% block head %}{% endblock %}
+  <script>
+    // Auto-inject CSRF token into all POST form submissions.
+    document.addEventListener('DOMContentLoaded', function () {
+      var token = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+      if (!token) return;
+      document.addEventListener('submit', function (e) {
+        var form = e.target;
+        if (form.method && form.method.toUpperCase() === 'POST') {
+          if (!form.querySelector('input[name="csrf_token"]')) {
+            var inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = 'csrf_token';
+            inp.value = token;
+            form.appendChild(inp);
+          }
+        }
+      }, true);
+
+      // Remove flash params (error, notice) from the URL after they are displayed
+      // so a page refresh does not re-show stale messages.
+      var url = new URL(window.location.href);
+      if (url.searchParams.has('error') || url.searchParams.has('notice')) {
+        url.searchParams.delete('error');
+        url.searchParams.delete('notice');
+        history.replaceState(null, '', url.toString());
+      }
+    });
+  </script>
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  {% block body %}{% endblock %}
+  {% block scripts %}{% endblock %}
+</body>
+</html>

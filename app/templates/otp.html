@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — OTP Verification{% endblock %}
+{% block body_class %}login-page{% endblock %}
+{% block body %}
+<main class="login-shell">
+  <div class="login-brand">
+    <div class="brand-icon"><img src="/static/images/game_icon.png" alt="{{ app_name }}" class="brand-icon-img" style="width:66px;height:66px;object-fit:contain;display:block"></div>
+    <h1>Verify OTP</h1>
+    <p>{{ role }} login — {{ username }}</p>
+  </div>
+  <section class="login-panel">
+    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+    {% if dev_otp %}
+    <div class="alert alert-notice dev-otp-banner">
+      <strong>Dev mode OTP:</strong> {{ dev_otp }}
+    </div>
+    {% endif %}
+    <p class="otp-info">
+      {% if delivery and delivery.sent %}
+        A 6-digit OTP was sent to your email address. Enter it below to complete login.
+      {% else %}
+        Check your email for the OTP code.
+      {% endif %}
+    </p>
+    <form method="post" action="/login/otp" class="login-form">
+      <input type="hidden" name="otp_token" value="{{ otp_token }}">
+      <div class="field-group">
+        <label class="field-label">One-Time Password</label>
+        <input
+          name="otp_code"
+          class="field-input otp-input"
+          inputmode="numeric"
+          maxlength="6"
+          pattern="[0-9]{6}"
+          placeholder="000000"
+          autocomplete="one-time-code"
+          autofocus
+          required
+        >
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Verify & Login</button>
+    </form>
+    <a href="/" class="back-link">← Back to login</a>
+  </section>
+</main>
+{% endblock %}

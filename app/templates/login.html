@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Login{% endblock %}
+{% block body_class %}login-page{% endblock %}
+{% block body %}
+<main class="login-shell">
+  <div class="login-brand">
+    <div class="brand-icon"><img src="/static/images/game_icon.png" alt="{{ app_name }}" class="brand-icon-img" style="width:66px;height:66px;object-fit:contain;display:block"></div>
+    <h1>{{ app_name }}</h1>
+    <p>Sign in to your account</p>
+  </div>
+  <section class="login-panel">
+    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+    {% if notice %}<div class="alert alert-notice">{{ notice }}</div>{% endif %}
+
+    {% if conflict_token %}
+    <div class="alert alert-notice">
+      Your account is already logged in on another device or browser session.
+    </div>
+    <form method="post" action="/login/force" class="login-form">
+      <input type="hidden" name="conflict_token" value="{{ conflict_token }}">
+      <button type="submit" class="btn btn-primary btn-full">Log out other device and sign in here</button>
+    </form>
+    <div style="text-align:center;margin-top:1rem;">
+      <a href="/" class="btn btn-ghost btn-sm">Cancel</a>
+    </div>
+    {% else %}
+    <form method="post" action="/login" class="login-form">
+      <div class="field-group">
+        <label class="field-label">Role</label>
+        <select name="role" class="field-input">
+          <option value="ADMIN">Admin Login</option>
+          <option value="AGENT">Agent Login</option>
+          <option value="USER">User Login</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Username</label>
+        <input id="login-username" name="username" class="field-input" autocomplete="new-password" placeholder="Username" required>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Password</label>
+        <input id="login-password" name="password" type="password" class="field-input" autocomplete="new-password" placeholder="Password" required>
+      </div>
+      <div class="captcha-group">
+        <div class="captcha-question">
+          <span class="captcha-label">Solve:</span>
+          <strong class="captcha-expr">{{ captcha.question }}</strong>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="window.location.reload()">↺ Refresh</button>
+        </div>
+        <input type="hidden" name="captcha_token" value="{{ captcha.token }}">
+        <input name="captcha_answer" class="field-input" inputmode="numeric" autocomplete="off" placeholder="Your answer" required>
+      </div>
+      <p class="login-hint">Admin and Agent logins require email OTP verification.</p>
+      <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+    </form>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var u = document.getElementById('login-username');
+    var p = document.getElementById('login-password');
+    if (u) u.value = '';
+    if (p) p.value = '';
+  });
+</script>
+{% endblock %}

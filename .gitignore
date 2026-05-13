@@ -1,0 +1,106 @@
+# -----------------------------
+# Python basics
+# -----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.env/
+.venv/
+env/
+ENV/
+
+# -----------------------------
+# Environment variables (IMPORTANT)
+# -----------------------------
+.env
+.env.*
+*.env
+*.env.*
+.env.local
+.env.*.local
+
+# -----------------------------
+# Logs & runtime files
+# -----------------------------
+*.log
+logs/
+*.pid
+*.seed
+
+# -----------------------------
+# Database files
+# -----------------------------
+*.sqlite3
+*.db
+
+# -----------------------------
+# FastAPI / Flask specific
+# -----------------------------
+instance/
+.webassets-cache
+
+# Flask session / cache
+.flaskenv
+
+# -----------------------------
+# Static / media (optional - remove if needed)
+# -----------------------------
+staticfiles/
+media/
+
+# -----------------------------
+# HTML / Templates cache
+# -----------------------------
+*.html~
+*.jinja2~
+*.tpl~
+
+# -----------------------------
+# IDE / Editor files
+# -----------------------------
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# -----------------------------
+# OS files
+# -----------------------------
+.DS_Store
+Thumbs.db
+
+# -----------------------------
+# Testing / coverage
+# -----------------------------
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# -----------------------------
+# Build / packaging
+# -----------------------------
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# -----------------------------
+# Misc
+# -----------------------------
+*.swp
+*.bak
+
+
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+*.db
+*.sqlite
+certs/
