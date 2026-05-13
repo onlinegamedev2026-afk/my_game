@@ -166,10 +166,10 @@ Run this twice — once for `SECRET_KEY`, once for `CSRF_SECRET`.
 ### 3.3 Build and Start Docker Containers
 
 ```bash
-docker compose up --build -d
+docker compose up --build --scale web=2 -d
 ```
 
-This starts: `web`, `pgbouncer`, `redis`, `celery_worker`, `celery_beat`, `celery_cleanup_worker`, `game_scheduler`.
+This starts: `web` (2 replicas on :8000 and :8001), `pgbouncer`, `redis`, `celery_worker`, `celery_beat`, `celery_cleanup_worker`, `game_scheduler`.
 
 Check all containers are running:
 
@@ -254,6 +254,10 @@ server {
         proxy_set_header Host $host;
         expires          7d;
         add_header       Cache-Control "public, immutable";
+        add_header       X-Frame-Options        "SAMEORIGIN"    always;
+        add_header       X-Content-Type-Options "nosniff"       always;
+        add_header       X-XSS-Protection       "1; mode=block" always;
+        add_header       Referrer-Policy        "strict-origin" always;
     }
 
     # Login — tight rate limit
@@ -273,6 +277,7 @@ server {
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     # Betting endpoints
@@ -288,10 +293,12 @@ server {
     location ~ ^/ws/ {
         proxy_pass         http://web_backend;
         proxy_http_version 1.1;
-        proxy_set_header   Upgrade    $http_upgrade;
-        proxy_set_header   Connection "upgrade";
-        proxy_set_header   Host       $host;
-        proxy_set_header   X-Real-IP  $remote_addr;
+        proxy_set_header   Upgrade           $http_upgrade;
+        proxy_set_header   Connection        "upgrade";
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
         proxy_read_timeout 3600s;
         proxy_send_timeout 3600s;
     }
@@ -433,14 +440,14 @@ docker compose restart game_scheduler
 
 ```bash
 docker compose down
-docker compose up --build -d
+docker compose up --build --scale web=2 -d
 ```
 
 ### Pull Code Updates and Redeploy
 
 ```bash
 git pull
-docker compose up --build -d
+docker compose up --build --scale web=2 -d
 ```
 
 ### Check Health
